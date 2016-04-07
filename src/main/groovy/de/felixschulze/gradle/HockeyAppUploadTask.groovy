@@ -63,6 +63,7 @@ class HockeyAppUploadTask extends DefaultTask {
     HockeyAppPluginExtension hockeyApp
     String uploadAllPath
 
+    File uploadResponseOutputDir = new File(project.buildDir, group)
 
     HockeyAppUploadTask() {
         super()
@@ -230,15 +231,19 @@ class HockeyAppUploadTask extends DefaultTask {
         else {
             logger.lifecycle("Application uploaded successfully.")
             if (response.getEntity() && response.getEntity().getContentLength() > 0) {
-                InputStreamReader reader = new InputStreamReader(response.getEntity().content)
+
+                def json = responseAsString(response)
+
+                File responseFile = responseOutputFile()
+                responseFile.write(json)
+
                 def uploadResponse = null
                 try {
-                    uploadResponse = new JsonSlurper().parse(reader)
+                    uploadResponse = new JsonSlurper().parseText(json)
                 }
                 catch (Exception e) {
                     logger.error("Error while parsing JSON response: " + e.toString())
                 }
-                reader.close()
                 if (uploadResponse) {
                     logger.info("Upload information: Title: '" + uploadResponse.title?.toString() + "' Config url: '" + uploadResponse.config_url?.toString()) + "'";
                     logger.debug("Upload response: " + uploadResponse.toString())
@@ -249,6 +254,23 @@ class HockeyAppUploadTask extends DefaultTask {
             }
             progressLogger.completed()
         }
+    }
+
+    static String responseAsString(HttpResponse response) {
+        InputStreamReader reader = new InputStreamReader(response.getEntity().content)
+        String json = reader.text
+        reader.close()
+        return json
+    }
+
+    File responseOutputFile() {
+
+        File buildVariantResponseDir = new File(uploadResponseOutputDir, variantName)
+        if (!buildVariantResponseDir.exists()) {
+            buildVariantResponseDir.mkdirs()
+        }
+
+        return new File(buildVariantResponseDir, "success.json")
     }
 
     private void parseResponseAndThrowError(HttpResponse response) {
