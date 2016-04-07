@@ -63,8 +63,6 @@ class HockeyAppUploadTask extends DefaultTask {
     HockeyAppPluginExtension hockeyApp
     String uploadAllPath
 
-    File uploadResponseOutputDir = new File(project.buildDir, group)
-
     HockeyAppUploadTask() {
         super()
         this.description = 'Uploads the app (Android: (.apk, mapping.txt), iOS:(.ipa, .dsym)) to HockeyApp'
@@ -265,6 +263,7 @@ class HockeyAppUploadTask extends DefaultTask {
 
     File responseOutputFile() {
 
+        File uploadResponseOutputDir = new File(project.buildDir, group)
         File buildVariantResponseDir = new File(uploadResponseOutputDir, variantName)
         if (!buildVariantResponseDir.exists()) {
             buildVariantResponseDir.mkdirs()
