@@ -63,11 +63,6 @@ class HockeyAppUploadTask extends DefaultTask {
     HockeyAppPluginExtension hockeyApp
     String uploadAllPath
 
-    /**
-     * if the app is successfully uploaded to HockeyApp the response is assigned to this variable
-     * so it can be access by other tasks.
-     */
-    Object uploadResponse
 
     HockeyAppUploadTask() {
         super()
@@ -244,7 +239,7 @@ class HockeyAppUploadTask extends DefaultTask {
                 def uploadResponse = null
                 try {
                     uploadResponse = new JsonSlurper().parseText(json)
-                    this.uploadResponse = uploadResponse
+                    project.ext.hockeyAppUploadResponse = uploadResponse
                 }
                 catch (Exception e) {
                     logger.error("Error while parsing JSON response: " + e.toString())
