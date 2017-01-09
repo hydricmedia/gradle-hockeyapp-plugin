@@ -38,6 +38,8 @@ dependencies {
     compile 'org.apache.httpcomponents:httpmime:4.5.1'
     compile 'com.android.tools.build:gradle:1.5.0'
     compile 'de.felixschulze.teamcity:teamcity-status-message-helper:1.2'
+
+    testCompile 'junit:junit:4.12'
 }
 
 test {
@@ -92,7 +94,7 @@ uploadArchives {
         }
         name = 'mavenCentralReleaseDeployer'
         repository(url: 'https://oss.sonatype.org/service/local/staging/deploy/maven2/') {
-            authentication(userName: System.properties['sonatypeUsername'], password: System.properties['sonatypePassword'])
+            authentication(userName: sonatypeUsername, password: sonatypePassword)
             releases(updatePolicy: 'always')
             snapshots(updatePolicy: 'always')
         }

@@ -25,6 +25,7 @@
 package de.felixschulze.gradle
 
 import com.android.build.gradle.api.ApplicationVariant
+import de.felixschulze.gradle.internal.ProgressLoggerWrapper
 import de.felixschulze.gradle.util.FileHelper
 import de.felixschulze.gradle.util.ProgressHttpEntityWrapper
 import de.felixschulze.teamcity.TeamCityProgressType
@@ -46,15 +47,13 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.Nullable
 import org.gradle.api.logging.Logger
 import org.gradle.api.tasks.TaskAction
-import org.gradle.logging.ProgressLogger
-import org.gradle.logging.ProgressLoggerFactory
 
 /**
  * Upload task for plugin
  */
 class HockeyAppUploadTask extends DefaultTask {
 
-    File applicationFile
+    List<File> applicationFiles = []
     File symbolsDirectory
     File mappingFile
     String variantName
@@ -75,14 +74,17 @@ class HockeyAppUploadTask extends DefaultTask {
 
         hockeyApp = project.hockeyapp
 
-        // Get the first output apk file if android
+        // Get all output apk files if android
         if (applicationVariant) {
             logger.debug('Using android application variants')
 
             applicationVariant.outputs.each {
                 if (FilenameUtils.isExtension(it.outputFile.getName(), "apk")) {
-                    applicationFile = it.outputFile
-                    return true
+                    if (it.outputFile.exists()) {
+                        applicationFiles << it.outputFile
+                    } else {
+                        logger.debug("App file doesn't exist: $it.outputFile.absolutePath")
+                    }
                 }
             }
 
@@ -102,23 +104,26 @@ class HockeyAppUploadTask extends DefaultTask {
             throw new IllegalArgumentException("Cannot upload to HockeyApp because API Token is missing")
         }
 
-        if (!applicationFile?.exists()) {
-            if (applicationFile) {
-                logger.debug("App file doesn't exist: "+applicationFile?.absolutePath)
-            }
+        if (!applicationFiles) {
             if (!applicationVariant && !hockeyApp.appFileNameRegex) {
                 throw new IllegalArgumentException("No appFileNameRegex provided.")
             }
             if (!hockeyApp.outputDirectory || !hockeyApp.outputDirectory.exists()) {
                 throw new IllegalArgumentException("The outputDirectory (" + hockeyApp.outputDirectory ? hockeyApp.outputDirectory.absolutePath : " not defined " + ") doesn't exists")
             }
-            applicationFile = FileHelper.getFile(hockeyApp.appFileNameRegex, hockeyApp.outputDirectory);
-            if (!applicationFile) {
+            applicationFiles = FileHelper.getFiles(hockeyApp.appFileNameRegex, hockeyApp.outputDirectory);
+            if (!applicationFiles) {
                 throw new IllegalStateException("No app file found in directory " + hockeyApp.outputDirectory.absolutePath)
             }
         }
 
-        logger.lifecycle("App file: " + applicationFile.absolutePath)
+        def appFilePaths = applicationFiles.collect { it.name }
+
+        if (!hockeyApp.allowMultipleAppFiles && applicationFiles.size() > 1) {
+            throw new IllegalStateException("Upload multiple files is not allowed: $appFilePaths")
+        }
+
+        logger.lifecycle("App files: $appFilePaths")
 
         // Retrieve mapping file if not using Android Gradle Plugin
         // Requires it to be set in the project config
@@ -147,14 +152,17 @@ class HockeyAppUploadTask extends DefaultTask {
             }
         }
 
-        uploadFilesToHockeyApp(applicationFile, mappingFile, appId)
+        applicationFiles.each {
+            uploadFilesToHockeyApp(it, mappingFile, appId)
+        }
 
     }
 
     def void uploadFilesToHockeyApp(File appFile, @Nullable File mappingFile, @Nullable String appId) {
 
-        ProgressLogger progressLogger = services.get(ProgressLoggerFactory).newOperation(this.getClass())
-        progressLogger.start("Upload file to Hockey App", "Upload file")
+        ProgressLoggerWrapper progressLogger = new ProgressLoggerWrapper(project, "Upload file to Hockey App");
+
+        progressLogger.started()
         if (hockeyApp.teamCityLog) {
             println TeamCityStatusMessageHelper.buildProgressString(TeamCityProgressType.START, "Upload file to Hockey App")
         }
@@ -247,6 +255,7 @@ class HockeyAppUploadTask extends DefaultTask {
                 if (uploadResponse) {
                     logger.info("Upload information: Title: '" + uploadResponse.title?.toString() + "' Config url: '" + uploadResponse.config_url?.toString()) + "'";
                     logger.debug("Upload response: " + uploadResponse.toString())
+                    logger.lifecycle("Application public url " + uploadResponse.public_url?.toString())
                 }
             }
             if (hockeyApp.teamCityLog) {
@@ -323,6 +332,10 @@ class HockeyAppUploadTask extends DefaultTask {
         String status = optionalProperty(hockeyApp.status as String, hockeyApp.variantToStatus)
         if (status) {
             entityBuilder.addPart("status", new StringBody(status))
+        }
+        String strategy = optionalProperty(hockeyApp.strategy as String, hockeyApp.variantToStrategy)
+        if (strategy) {
+            entityBuilder.addPart("strategy", new StringBody(strategy))
         }
         String releaseType = optionalProperty(hockeyApp.releaseType as String, hockeyApp.variantToReleaseType)
         if (releaseType) {
